@@ -50,8 +50,8 @@ func NewEditor() *Editor {
     defaultStyle := tcell.StyleDefault.Background(bgColor).Foreground(tcell.ColorWhite)
 
     editor := &Editor{
-        buffers:   []*Buffer{{lines: []string{""}, saved: false}},
-        status:    "Welcome to GoEditor | Ctrl-Q: Quit | Ctrl-S: Save | F1: Toggle Highlight | Ctrl-T: New Tab | Ctrl-W: Close Tab | Ctrl-PgUp/PgDn: Switch Tabs",
+        buffers:   []*Buffer{}, // Inicializar sin buffers
+        status:    "Welcome to GoEditor | Ctrl-Q: Quit | Ctrl-S: Save | F1: Toggle Highlight | Ctrl-T: New Tab | Ctrl-W: Close Tab | Ctrl-Left/Right: Switch Tabs",
         highlight: true,
         languages: make(map[string]LanguageRules),
     }
@@ -180,7 +180,11 @@ func (e *Editor) setupCOBOLHighlightRules() {
 
 func (e *Editor) currentBuffer() *Buffer {
     if len(e.buffers) == 0 {
-        e.buffers = append(e.buffers, &Buffer{lines: []string{""}})
+        // Si no hay buffers, crear uno nuevo
+        buf := &Buffer{lines: []string{""}}
+        e.buffers = append(e.buffers, buf)
+        e.activeBuf = 0
+        return buf
     }
     return e.buffers[e.activeBuf]
 }
@@ -237,17 +241,17 @@ func (e *Editor) OpenFile(filename string) error {
         lines = []string{""}
     }
 
-    // Crear nuevo buffer
-    buf := &Buffer{
-        lines:    lines,
-        filename: filename,
-        saved:    true,
-    }
+    // Usar el buffer actual (en lugar de crear uno nuevo)
+    buf := e.currentBuffer()
+    buf.lines = lines
+    buf.filename = filename
+    buf.saved = true
+    buf.cursorX = 0
+    buf.cursorY = 0
+    buf.offsetX = 0
+    buf.offsetY = 0
 
-    e.buffers = append(e.buffers, buf)
-    e.activeBuf = len(e.buffers) - 1
     e.status = "Opened: " + filename
-
     return nil
 }
 
@@ -590,11 +594,22 @@ func main() {
     defer editor.Close()
 
     if len(os.Args) > 1 {
-        for _, filename := range os.Args[1:] {
+        // Abrir el primer archivo
+        if err := editor.OpenFile(os.Args[1]); err != nil {
+            fmt.Fprintf(os.Stderr, "Error opening file: %v\n", err)
+            os.Exit(1)
+        }
+
+        // Abrir los archivos restantes en nuevas pestañas
+        for _, filename := range os.Args[2:] {
+            editor.NewTab() // Crear nueva pestaña antes de abrir el archivo
             if err := editor.OpenFile(filename); err != nil {
                 editor.status = "Error opening file: " + err.Error()
             }
         }
+    } else {
+        // Si no hay argumentos, crear una pestaña vacía
+        editor.NewTab()
     }
 
     editor.Run()
